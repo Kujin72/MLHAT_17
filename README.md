@@ -1,112 +1,75 @@
-# MLHAT independent rebuild — Introduction to Machine Learning
+# MLHAT_17 — Independent MLHAT-Inspired Reimplementation
 
-> **STATUS:** Stage 1 technical baseline complete. **This is NOT a complete MLHAT
-> implementation and NOT a reproduction of the paper's reported results.**
-> All source code in this starter was newly authored for the staged project.
+Introduction to Machine Learning term project. Independent, staged implementation inspired by Esteban et al., *Hoeffding adaptive trees for multi-label classification on data streams* ([arXiv:2410.20242](https://arxiv.org/abs/2410.20242)).
 
-## Sources
+> **Scientific status: PARTIAL REPRODUCTION, NOT EXACT PAPER MLHAT.** Our Stage 3 uses an ADWIN-inspired window detector, custom leaf classifiers, alternate-tree replacement and a Hoeffding-style comparator. Full paper-specific Poisson bootstrap, precise ADWIN, probabilistic blending, exact numerical observers and matching all evaluation metrics are not yet implemented. The synthetic drift demonstration is our own, not a published benchmark. We did not copy the authors' implementation.
 
-1. Esteban et al., *Hoeffding adaptive trees for multi-label classification on data streams*,
-   arXiv:2410.20242v1. Use Sections 2–4 and Algorithms 1–3.
-2. Course handout `index.md` — Term Project: Overview.
+## Implemented components
 
-The course prohibits copying code from the authors' public repository, their
-figures or text, and another team's submission. The repository below is for
-**reference and cross-checking only**: https://github.com/aestebant/mlhat.
+| Module | Purpose | Status |
+| --- | --- | --- |
+| `src/mlhat_rebuild/tree.py` | Stage 1 binary-feature Hoeffding tree | Basic prototype |
+| `src/mlhat_rebuild/entropy.py` | Entropy and Hoeffding split bound | Independent implementation |
+| `src/mlhat_rebuild/numeric_observer.py` | Numeric split candidate observer | Approximate |
+| `src/mlhat_rebuild/online_learners.py` | LP-kNN and bagged logistic leaf learners | Approximate |
+| `src/mlhat_rebuild/stage2.py` | Numeric incremental tree with adaptive leaf choice | Partial |
+| `src/mlhat_rebuild/drift.py` | Adaptive loss monitoring | ADWIN-inspired, not exact |
+| `src/mlhat_rebuild/stage3.py` | Alternate branches and replacement | Partial |
+| `src/mlhat_rebuild/benchmark_data.py` | ARFF/XML real-benchmark loader | Implemented, provenance to verify |
+| `src/mlhat_rebuild/metrics.py` | Test-then-train metrics; EWMA | Implemented, paper equivalence unverified |
 
-## System requirements
-
-- Python 3.10+; runs on Windows PowerShell or Linux.
-- No GPU needed for this first-stage baseline. W&B is optional locally but
-  **required for course experiments** by the supplied overview.
-
-## Quick start (PowerShell)
+## Setup (Windows PowerShell)
 
 ```powershell
-cd .\mlhat_term_project_starter
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e '.[tracking]'
+cd MLHAT_17
+python -m pip install -e ".[tracking]"
 python -m unittest discover -s tests -v
-python .\experiments\dependence_counterexample.py
-python .\experiments\run_stream.py --model majority --samples 3000 --seed 42
-python .\experiments\run_stream.py --model ht --samples 3000 --seed 42
 ```
 
-If PowerShell blocks activation use `Set-ExecutionPolicy -Scope Process Bypass`
-or invoke `.\.venv\Scripts\python.exe` directly. These commands generate CSV
-and JSON under `results/`, including reproducibility configuration.
+Python >= 3.10. GPU is not required. The local virtual environment, datasets, W&B credentials and raw results are excluded from Git.
 
-### W&B public run tracking (requires user account + network)
+## Experiments
+
+### Real-world data: Emotions / Yeast
+
+Place full ARFF/XML pairs under `data/`. They are not distributed in this repo. Download from the relevant multi-label dataset provider and record the provenance and checksum.
 
 ```powershell
-wandb login
-python .\experiments\run_stream.py --model ht --samples 3000 --seed 42 --wandb --project mlhat-independent-rebuild
+python .\experiments\run_paper_benchmark.py --dataset Emotions --arff .\data\emotions.arff --xml .\data\emotions.xml --model stage3 --seed 42 --wandb --project mlhat17-reproduction
+python .\experiments\run_paper_benchmark.py --dataset Yeast --arff .\data\yeast.arff --xml .\data\yeast.xml --model stage3 --seed 42 --wandb --project mlhat17-reproduction
+python .\experiments\summarize_lab1.py
 ```
 
-Set the W&B project visibility to **Public** in your account. `--wandb` is
-opt-in to avoid accidental private/untracked demo claims. Link each published
-run in the deck/poster. The detailed W&B rules are in the **Lab 1 course page**,
-which was NOT supplied; obtain it before submitting.
+Benchmark runner currently defaults to generic baseline `delta=1e-5`, whereas paper Table 5 specifies tuned MLHAT `delta_spl=1e-7`; set `--delta 1e-7` explicitly for an additional *matched-parameter sensitivity experiment*, not a replacement of the earlier run. Original paper scores and our EWMA aggregation are **not proven metric-equivalent**.
 
-## Source tree
+### Controlled concept drift (independent synthetic stream)
 
-```text
-src/mlhat_rebuild/
-  entropy.py   Eq. (3), (5), (7); independent mathematical helper
-  tree.py      Online multi-label Hoeffding tree BASELINE (binary features only)
-  stream.py    Reproducible synthetic demo with one concept drift
-  metrics.py   Test-then-train example-F1, Hamming loss, subset accuracy
-experiments/
-  run_stream.py                 CLI demonstration, CSV/JSON + optional W&B
-  dependence_counterexample.py Eq. (5) theory stress test
-src/mlhat_rebuild/ ...
-tests/         Deterministic tests
-results/       Generated experiments and metadata
+The diagnostic stream has 3,000 instances with drift at sample 1,500. Recreate paired Stage 2/3 runs on seeds 42, 43, 44 **only if the local results are absent**, or deliberately provide `-Overwrite`. Use `-Track` to log new runs to W&B.
 
-docs/
-  requirements_mapping.md   Paper/course requirement traceability
-  paper_notes.md           Stepwise paper specification and replication defaults
-  lab2_hypothesis.md       Proposed critique + controlled experiments
-  slide_outline.md         Draft deck structure; NOT submission-ready
-  poster_outline.md        Draft poster structure; NOT submission-ready
+```powershell
+.\experiments\run_drift_multiseed.ps1 -Seeds @(42,43,44) -Track
+
+# Re-analyze existing runs without training or W&B calls:
+python .\experiments\analyze_drift.py --seeds 42 43 44
+
+# Optional graph from saved CSV/JSON results:
+python -m pip install matplotlib
+python .\experiments\plot_drift_recovery.py --seed 42
 ```
+
+Generated CSV/JSON/PNG files go to ignored `results/`. To publish the graph, copy it to `docs/figures/` and commit that selected asset. Do **not** commit raw datasets, credentials, `wandb/` or the whole `results/` folder.
+
+## Experimental findings (preliminary)
+
+- Emotions: Stage 3 EWMA Example-F1 **0.4211**, Majority **0.2647** (paper MLHAT Example-F1 reference **0.446**, not strictly comparable).
+- Yeast: Stage 3 EWMA Example-F1 **0.5829**, Majority **0.5320** (paper reference **0.588**, not strictly comparable).
+- On these two real datasets, Stage 2 and Stage 3 give identical metrics with zero splits and replacements. This does **not** validate adaptive-tree behavior.
+- Synthetic controlled drift, 3 independent seeds: Stage 3 cumulative Example-F1 mean **0.7821** vs Stage 2 **0.7583**; mean paired improvement **+0.0238**. Early post-drift mean improvement **+0.0493**, recovery period **+0.0468**. Every Stage 3 run generated a branch replacement. Results are descriptive for three seeds, not a significance claim.
+
+**Detailed tables, methodology, run URLs, limitations:** [docs/experimental_results.md](docs/experimental_results.md)
+
+[W&B project](https://forge.coreweave.com/wandb/phtien296-ho-chi-minh-city-university-of-technology/mlhat17-reproduction) · [Paper notes](docs/paper_notes.md) · [Requirements mapping](docs/requirements_mapping.md)
 
 ## Important limitations
 
-`tree.py` operates ONLY on binary input features and majority-labelset leaves.
-It does **not** implement numerical Gaussian observers, categorical multi-value
-splits, LP-kNN, BR-ADWIN-Bagging+LR, online Poisson bootstrap, ADWIN drift
-monitoring, alternate branches, replacement/pruning, or prediction blending.
-The published model has **all** these components. They must be implemented and
-unit-tested before reporting *MLHAT reproduced*.
-
-Results on `synthetic_demo_NOT_paper` validate engineering only. The paper's
-41 datasets (including MOA drift cases) must be obtained and their evaluation
-settings matched for Lab 1. The paper studies 11 multi-label metrics plus time;
-this starter implements just 3 multi-label metrics and does not measure time.
-
-**Model parameter caveat:** Paper Section 4.1 broadly reports tree defaults
-`delta=1e-5`, `grace_period=200`; its tuned MLHAT Table 5 reports `delta_spl=1e-7`.
-The starter uses **generic-baseline** `1e-5`, NOT final tuned MLHAT config.
-This distinction must be maintained in all results. The paragraph beneath
-Table 5 also conflicts with the table on eta and alternate-tree size
-(620/450 versus 750/200); log this uncertainty rather than silently choosing
-a number. Full spec in docs/paper_notes.md.
-
-## Suggested roadmap
-
-1. Stage 1 (done): stream protocol, entropy/split equation tests, binary HT,
-   majority baseline, prequential metrics, public experiment tracking integration.
-2. Stage 2: numeric/categorical Gaussian observers; independent LP-kNN leaf;
-   independent BR+ADWIN-Bagging+LR leaf; threshold selection (eta=750).
-3. Stage 3: ADWIN Hamming loss per internal node, alternate trees, confidence
-   interval replacement, Poisson(1) resampling and probabilistic blending.
-4. Stage 4: real/MOA benchmark loaders; full metrics; verification of accuracy,
-   time, memory, group baselines; multi-seed runs; comparison with Table 6+.
-5. Stage 5: theoretical critique and stress-test ablations; deck/poster.
-
-**Do not change the seed or tune on test results without recording the new run.**
-Record dataset version, source link, feature transformations, seed, computer
-specification, code commit SHA, parameters and metrics for every experiment.
+This is not a complete reimplementation of MLHAT. Unfinished work includes faithful numerical/categorical observers, the exact paper leaf ensemble and bootstrapping, ADWIN and alternate confidence testing, probability prediction aggregation, source-data verification, matched fading evaluation, and full published metric suite. The authors' [reference repository](https://github.com/aestebant/mlhat) is for conceptual cross-checking only, not for copying code.
